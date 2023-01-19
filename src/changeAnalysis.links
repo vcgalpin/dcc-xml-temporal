@@ -87,7 +87,6 @@ typename Message =
                                            else if (ddeParent(x.dde,y1.dde))
                                              addCounts(i+y1.ins,c+y1.chs,i+y1.ins,c+y1.chs,y2::ys,xs,x)
                                            else {
-                                             println("third option");
                                              addCounts(i,c,i,c,ch,xs,x)
                                            }
                       }    
