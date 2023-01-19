@@ -9,7 +9,7 @@ For MacOS users, both opam and PostgreSQL can be installed via *[HomeBrew](https
 
 Second, a PostgreSQL database is created with the command
 ```
-$ psql -c "CREATE DATABASE dcc_anon;" 
+$ createdb dcc_anon 
 $ psql -d dcc_anon -f setup_dcc_anon.sql 
 ```
 Next, the file `config.0.9.7` is edited to replace `<username>` and `<password>` with the appropriate PostgreSQL username and password respectively. It may also be necessary to modify the PostgreSQL port from 5432, depending on the setup.
