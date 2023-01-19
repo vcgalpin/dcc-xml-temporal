@@ -13,7 +13,7 @@ $ psql -c "CREATE DATABASE dcc_anon;"
 $ psql -d dcc_anon -f ccSetup_dcc_anon.sql 
 ```
 Next, the file `config.0.9.7` is edited to replace `<username>` and `<password>` with the appropriate PostgreSQL username and password respectively. It may also be necessary to modify the PostgreSQL port from 5432, depending on the setup.
-For more information about database setup, see **[points 4 to 6 here](https://github.com/links-lang/links/wiki/Database-setup)**
+For more information about database setup, see **[points 4 to 6 here](https://github.com/links-lang/links/wiki/Database-setup)**.
 
 Once these steps are completed, the application can be run using
 ```
@@ -91,7 +91,7 @@ links> @load "xmlDocument.links";
 links> @load "new.links";
 links> insertXml(new,dde,before)
 ```
-The variable `dde` must be the string representation of an existing XML node (for example `"+001.+006.+005.+002"`) and the variable `before` is a Boolean variable indicating whether the new XML should be inserted before of after `dde`.
+The variable `dde` must be the string representation of an existing XML node (for example `"+001.+006.+005.+002"`) and the variable `before` is a Boolean variable indicating whether the new XML should be inserted before or after `dde`.
 
 The document can also be modified directly using `psql`, however, this requires an understanding of the organisation of the temporal tables. Please submit an issue if you would like further information about this.
 
