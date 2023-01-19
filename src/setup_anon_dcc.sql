@@ -21,7 +21,7 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: xml_attr; Type: TABLE; Schema: public; Owner: vgalpin1
+-- Name: xml_attr; Type: TABLE; Schema: public
 --
 
 CREATE TABLE public.xml_attr (
@@ -34,10 +34,8 @@ CREATE TABLE public.xml_attr (
 );
 
 
-ALTER TABLE public.xml_attr OWNER TO vgalpin1;
-
 --
--- Name: xml_node; Type: TABLE; Schema: public; Owner: vgalpin1
+-- Name: xml_node; Type: TABLE; Schema: public
 --
 
 CREATE TABLE public.xml_node (
@@ -52,10 +50,9 @@ CREATE TABLE public.xml_node (
 );
 
 
-ALTER TABLE public.xml_node OWNER TO vgalpin1;
 
 --
--- Name: xml_path; Type: TABLE; Schema: public; Owner: vgalpin1
+-- Name: xml_path; Type: TABLE; Schema: public
 --
 
 CREATE TABLE public.xml_path (
@@ -64,10 +61,9 @@ CREATE TABLE public.xml_path (
 );
 
 
-ALTER TABLE public.xml_path OWNER TO vgalpin1;
 
 --
--- Name: xml_path_path_id_seq; Type: SEQUENCE; Schema: public; Owner: vgalpin1
+-- Name: xml_path_path_id_seq; Type: SEQUENCE; Schema: public
 --
 
 CREATE SEQUENCE public.xml_path_path_id_seq
@@ -79,24 +75,23 @@ CREATE SEQUENCE public.xml_path_path_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.xml_path_path_id_seq OWNER TO vgalpin1;
 
 --
--- Name: xml_path_path_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: vgalpin1
+-- Name: xml_path_path_id_seq; Type: SEQUENCE OWNED BY; Schema: public
 --
 
 ALTER SEQUENCE public.xml_path_path_id_seq OWNED BY public.xml_path.path_id;
 
 
 --
--- Name: xml_path path_id; Type: DEFAULT; Schema: public; Owner: vgalpin1
+-- Name: xml_path path_id; Type: DEFAULT; Schema: public
 --
 
 ALTER TABLE ONLY public.xml_path ALTER COLUMN path_id SET DEFAULT nextval('public.xml_path_path_id_seq'::regclass);
 
 
 --
--- Data for Name: xml_attr; Type: TABLE DATA; Schema: public; Owner: vgalpin1
+-- Data for Name: xml_attr; Type: TABLE DATA; Schema: public
 --
 
 COPY public.xml_attr (attr, dde, value, original, tt_from, tt_to) FROM stdin;
@@ -116,7 +111,7 @@ refType	+001.+007.+001.+003.+001.+002.+001.+003	basic_measuredValue	t	2023-01-18
 
 
 --
--- Data for Name: xml_node; Type: TABLE DATA; Schema: public; Owner: vgalpin1
+-- Data for Name: xml_node; Type: TABLE DATA; Schema: public
 --
 
 COPY public.xml_node (dde, tag, path, path_id, text, original, tt_from, tt_to) FROM stdin;
@@ -216,7 +211,6 @@ COPY public.xml_node (dde, tag, path, path_id, text, original, tt_from, tt_to) F
 +001.+006.+006.+001.+001	dcc:content	/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:name/	-1		t	2023-01-18 20:22:34.71568+00	infinity
 +001.+006.+006.+001.+001.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:name/dcc:content	-1	AB Production	t	2023-01-18 20:22:34.715875+00	infinity
 +001.+006.+006.+002	dcc:eMail	/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/	-1		t	2023-01-18 20:22:34.716114+00	infinity
-+001.+006.+006.+002.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:eMail	-1	ab_prod@example.com	t	2023-01-18 20:22:34.716328+00	infinity
 +001.+006.+006.+003	dcc:location	/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/	-1		t	2023-01-18 20:22:34.71659+00	infinity
 +001.+006.+006.+003.+001	dcc:street	/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:location/	-1		t	2023-01-18 20:22:34.716786+00	infinity
 +001.+006.+006.+003.+001.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:location/dcc:street	-1	Hardtofind Terrace	t	2023-01-18 20:22:34.716985+00	infinity
@@ -349,11 +343,13 @@ COPY public.xml_node (dde, tag, path, path_id, text, original, tt_from, tt_to) F
 +002.+012.+010.+003.+001.+001.+001.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData//dcc:respPerson/dcc:person/dcc:name/dcc:content	-1	A. Salesperson	f	2023-01-18 20:22:54.818886+00	infinity
 +002.+012.+010.+003.+002	dcc:role	/dcc:digitalCalibrationCertificate/dcc:administrativeData//dcc:respPerson/	-1		f	2023-01-18 20:22:54.819309+00	infinity
 +002.+012.+010.+003.+002.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData//dcc:respPerson/dcc:role	-1	Account management	f	2023-01-18 20:22:54.819541+00	infinity
++001.+006.+006.+002.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:eMail	-1	a_prod@example.com	f	2023-01-18 20:22:34.716114+00	2023-01-19 09:07:27+00
++001.+006.+006.+002.+001		/dcc:digitalCalibrationCertificate/dcc:administrativeData/dcc:customer/dcc:eMail	-1	ab_prod@example.com	f	2023-01-19 09:07:27+00	infinity
 \.
 
 
 --
--- Data for Name: xml_path; Type: TABLE DATA; Schema: public; Owner: vgalpin1
+-- Data for Name: xml_path; Type: TABLE DATA; Schema: public
 --
 
 COPY public.xml_path (path_id, path) FROM stdin;
@@ -361,14 +357,14 @@ COPY public.xml_path (path_id, path) FROM stdin;
 
 
 --
--- Name: xml_path_path_id_seq; Type: SEQUENCE SET; Schema: public; Owner: vgalpin1
+-- Name: xml_path_path_id_seq; Type: SEQUENCE SET; Schema: public
 --
 
 SELECT pg_catalog.setval('public.xml_path_path_id_seq', 1, false);
 
 
 --
--- Name: xml_attr xml_attr_pkey; Type: CONSTRAINT; Schema: public; Owner: vgalpin1
+-- Name: xml_attr xml_attr_pkey; Type: CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.xml_attr
@@ -376,7 +372,7 @@ ALTER TABLE ONLY public.xml_attr
 
 
 --
--- Name: xml_node xml_node_pkey; Type: CONSTRAINT; Schema: public; Owner: vgalpin1
+-- Name: xml_node xml_node_pkey; Type: CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.xml_node
@@ -384,7 +380,7 @@ ALTER TABLE ONLY public.xml_node
 
 
 --
--- Name: xml_path xml_path_pkey; Type: CONSTRAINT; Schema: public; Owner: vgalpin1
+-- Name: xml_path xml_path_pkey; Type: CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.xml_path
