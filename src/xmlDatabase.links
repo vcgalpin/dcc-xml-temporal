@@ -1,0 +1,43 @@
+open import NameOfDB;
+
+var xml_node =
+  table "xml_node"
+    with (dde: String,
+          tag: String,   # redundant
+          path: String,  # redundant if path_id used
+          path_id: Int,
+          text: String,
+          original: Bool)
+    tablekeys [["dde"]]
+    #using valid_time(vt_from, vt_to)
+    using transaction_time(tt_from, tt_to)
+  from db;
+
+var xml_path =
+  table "xml_path"
+    with (path_id: Int,
+          path: String)
+    tablekeys [["path_id"]]
+    #using valid_time(vt_from, vt_to)
+    using transaction_time(tt_from, tt_to)
+  from db;
+
+var xml_attr =
+  table "xml_attr"
+    with (attr: String,
+          dde: String,
+          value: String,
+          original: Bool)
+    tablekeys [["attr","dde"]]
+    #using valid_time(vt_from, vt_to)
+    using transaction_time(tt_from, tt_to)
+  from db;
+
+# not useful when using transaction time
+#
+#fun dbEmpty () {
+#  delete (x <-- xml_attr) where (true);
+#  delete (x <-- xml_node) where (true);
+#  delete (x <-- xml_path) where (true)
+#}
+

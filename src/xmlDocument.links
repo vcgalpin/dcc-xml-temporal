@@ -1,0 +1,539 @@
+open import StringUtilities;
+open import DdeHandling;
+open import XmlDatabase;
+
+## NB ## attribute code not fully tested -- focus has been on nodes because of dcc schema
+
+# note that the Model type used in Mvu needs a specified type but the functions here don't 
+
+# this is the type of the built-in structured XML type
+#typename XmlVariant = mu b . [[|Attr:(String, String)|Node:(String, b)|
+#                                NsAttr:(String, String, String)|NsNode:(String, String, b)|
+#                                Text:String|]];
+
+typename Attr = (attr:String, dde:String, tt_from:DateTime, tt_to:DateTime, value:String);
+
+
+# =================================================================================
+# functions to read document from database
+
+fun getAllNodesAndAttrs () server { # adds ddeList and hide fields
+                             # transforms DateTime to fields
+                             # groups records for same dde
+                             # sorts by dde
+  # get basic data without using wild operations
+  var ana = query nested { 
+    for (x <-t- xml_node) 
+      [(node=x, attrs = 
+        for (y <-t- xml_attr) 
+          where (ttData(x).dde==ttData(y).dde) [y]) 
+      ]
+    };
+  # transform
+  var anas = for (x <- ana)
+    [(dde=ttData(x.node).dde, ddeList=ddeSep(ttData(x.node).dde),
+      path=ttData(x.node).path, path_id=ttData(x.node).path_id, 
+      text=ttData(x.node).text, tag=ttData(x.node).tag,
+      original=ttData(x.node).original, hide=false,      
+      tt_from=ttFrom(x.node), tt_to=ttTo(x.node), 
+      attrs=
+        for (y <- x.attrs)
+          [(dde=ttData(y).dde,
+            attr=ttData(y).attr, value=ttData(y).value,
+            tt_from=ttFrom(y), tt_to=ttTo(y) ) 
+          ])
+    ];
+  sortUsingDdeSorter(anas)
+}
+# result type : [(attrs:[(attr:String,dde:String,tt_from:DateTime,tt_to:DateTime,value:String)],
+# dde:String,ddeList:[Int],hide:Bool,original:Bool,
+# path:String,path_id:Int,tag:String,text:String, 
+# tt_from:DateTime,tt_to:DateTime)]
+#
+# used in changeAnalysis, requires further conversion of rows with the same dde to nested list
+
+fun getNodesAndAttrsAtTime (time) server { # adds ddeList and hide fields
+                                    # transforms DateTime to strings
+                                    # sorts by dde
+  # get basic data without using wild operations
+  var tna = query nested { 
+    for (x <-t- xml_node) 
+      where (time >= ttFrom(x) && time <= ttTo(x))
+      [(node= x, attrs = 
+        for (y <-t- xml_attr) 
+          where (ttData(x).dde==ttData(y).dde &&
+                 time >= ttFrom(y) && time <= ttTo(y)) [y]) 
+      ]
+    };
+  # transform
+  var tnas = for (x <- tna)
+    [(dde=ttData(x.node).dde, ddeList=ddeSep(ttData(x.node).dde),
+      path=ttData(x.node).path, path_id=ttData(x.node).path_id, 
+      text=ttData(x.node).text, tag=ttData(x.node).tag,
+      original=ttData(x.node).original, hide=false,      
+      tt_from=ttFrom(x.node), tt_to=ttTo(x.node), 
+      attrs=
+        for (y <- x.attrs)
+          [(dde=ttData(y).dde,
+            attr=ttData(y).attr, value=ttData(y).value,
+            tt_from=ttFrom(y), tt_to=ttTo(y) ) 
+          ])
+    ];
+  if (tnas<>[])
+    sortUsingDdeSorter(tnas)
+  else
+    []
+}
+# result type : [(attrs:[(attr:String,dde:String,tt_from:DateTime,tt_to:DateTime,value:String)],
+# dde:String,ddeList:[Int],hide:Bool,original:Bool,
+# path:String,path_id:Int,tag:String,text:String, 
+# tt_from:DateTime,tt_to:DateTime)]
+#
+# used in currentVersion, previousVersion and compareVersion
+
+fun getNodesAndAttrsForPredAtTime (time, pred) {
+  for (x <- getNodesAndAttrsAtTime(time)) where (pred(x)) [x]
+}
+
+fun getCurrentNodesAndAttrs () {
+  getNodesAndAttrsAtTime(now())
+}
+
+fun hasAttributes (x) { x.attrs <> [] }
+
+# ============================================================================
+# functions for xml document shredding
+
+var no_path = -1;
+
+#sig xmlShred : (Xml, String, String, Bool) ~> [()]
+fun xmlShred (doc,dde,path,original) { # shred to database
+
+  fun insertPath () {     
+    () # to be implemented
+  }
+
+  fun insertText (s,p,t) {
+    tt_insert xml_node values 
+      (dde,tag,path,path_id,text,original)
+      [(dde=s,tag="",path=p,path_id=no_path,text=t,original=original)]
+  }
+
+  fun insertAttr (s,p,n,v) {
+    # don't treat as a child node, so record parent only
+    if (n<>"LinksDDE") {
+      tt_insert xml_attr values 
+        (attr,dde,value,original)
+        [(attr=n,dde=ddeBeforeSelf(s),value=v,original=original)]
+    } else { () }   
+  }
+
+  fun shredToTuples(s,p,x) {
+    fun genChildNodes(s,p,c,i) {
+       switch (c) {
+         case []    -> []
+         case x::xs -> shredToTuples(s^^separator^^intToSeg(i),p,x)
+                         ++genChildNodes(s,p,xs,i+1)
+       }
+    } 
+    fun insertNode (s,p,t,c) {
+      tt_insert xml_node values 
+        (dde,tag,path,path_id,text,original)
+        [(dde=s,tag=t,path=p^^"/",path_id=no_path,text="",original=original)];
+      genChildNodes(s,p^^"/"^^t,c,1)
+    }
+    #======
+    switch (x) {
+      case Node(t,c) -> insertNode(s,p,t,c)
+      case Attr(n,v) -> [insertAttr(s,p,n,v)]
+      case Text(t)   -> [insertText(s,p,t)]
+      case _         -> error("not implemented or malformed")
+    }
+  }
+  #=======
+  if (length(doc)<>1) {
+    error("Expecting a singleton list of XmlItem")
+  } else {   
+    var x = hd(xmlToVariant(doc));
+    #switch (x) {
+    #  case Node(y) -> x
+    #  case _         -> error("Text or Attr or SomethingElse: expecting Node")
+    #};
+    shredToTuples(dde,path,x)
+  }
+}
+
+fun shredToList(x,s,p,original) { # shred to node list - no database interaction
+  fun genChildNodes(s,p,c,i) {
+    switch (c) {
+      case []    -> []
+      case x::xs -> shredToList(x,s^^separator^^intToSeg(i),p,original)
+                      ++genChildNodes(s,p,xs,i+1)
+    }
+  }
+  #======
+  switch (x) {
+    case Node(t,c) -> (dde=s,tag=t,path=p^^"/"^^t,path_id=no_path,text="",original=original)
+                        ::genChildNodes(s,p^^"/"^^t,c,1)
+    case Text(t)   -> [(dde=s,tag="",path=p,path_id=no_path,text=t,original=original)]
+    case Attr(t,s) -> []
+    case _         -> error("not implemented or malformed")
+  }
+}
+
+fun callSTL (d) {
+  shredToList(hd(xmlToVariant(d)),initialSeg,"",false)
+}
+
+# ============================================================================
+# functions for xml reconstruction from database
+
+fun reconstructXml (rows,dbAttr,ddeAttr) {
+  fun getAttr (dde) {
+    fun addDdeAttr (dde) {
+      if (ddeAttr)
+        [Attr("LinksDDE",dde)]
+      else
+        []
+    }
+    if (dbAttr) {
+      var a = query { for (x <-t- xml_attr) where (ttData(x).dde==dde) [ttData(x)]};
+      addDdeAttr(dde) ++
+        (for (x <- a) [Attr(x.attr,x.value)])
+    } else addDdeAttr(dde)
+  }  
+  fun processNext(p,nL) {
+    fun processItem (c,nL) {
+      if (c.tag<>"" && c.text=="") {
+         if (nL<>[]) {
+           var t = processNext(c.dde,nL);
+           if (ddeSibling(c.dde,hd(nL).dde))
+             ([Node(c.tag,getAttr(c.dde))]++t.1,t.2)
+           else
+             ([Node(c.tag,getAttr(c.dde)++t.1)],t.2) 
+         } else
+           ([Node(c.tag,[])],[])
+      } else if (c.tag=="" && c.text<>"")
+         ([Text(c.text)],nL)
+      else error("Check node "^^c.dde^^" for non-empty tag and text fields")
+    }
+    if (nL<>[]) {
+      var u = processItem(hd(nL),tl(nL));
+      if (u.2<>[]) { 
+        if (ddeParent(p,hd(u.2).dde)) {
+          var v = processNext(p,u.2);
+            (u.1++v.1,v.2)
+        } else u
+      } else u
+    } else
+     ([],[])      
+  }
+  if (rows<>[]) {
+    var x = processNext(hd(rows).dde,rows);
+    if (x.2 <> []) 
+      error("Node list not empty: something has gone wrong")
+    else
+      x.1
+  } else
+    []
+}
+
+# ============================================================================
+# functions for comparing xml documents
+
+  #sig compareXml : (XmlVariant,XmlVariant) ~> Bool
+  fun compareXml(x1,x2) {
+    fun compareItem(i1,i2) {
+      switch (i1) {
+       case Text(t1)         -> switch (i2) {
+                                  case Text(t2) -> if (t1==t2) true else false
+                                  case        _ -> false
+                                }
+       case Attr(t1,s1)      -> switch (i2) {
+                                  case Attr(t2,s2) -> if (t1==t2 && s1==s2) true else false
+                                  case           _ -> false
+                                }
+       case Node(t1,l1)      -> switch (i2) {
+                                  case Node(t2,l2) -> if (t1==t2 && compareXml(l1,l2)) true else false
+                                  case           _ -> false
+                                }
+       case NsAttr(t1,s1,r1) -> switch (i2) {
+                                  case NsAttr(t2,s2,r2) -> if (t1==t2 && s1==s2 && r1==r2) true else false
+                                  case                _ -> false
+                                }
+       case NsNode(t1,s1,l1) -> switch (i2) {
+                                  case NsNode(t2,s2,l2) -> if (t1==t2 && s1==s2 && compareXml(l1,l2)) true else false
+                                  case                _ -> false
+                                }
+     }
+   }
+   switch (x1) {
+        case []    -> if (x2==[]) true else false
+        case n::ns -> switch (x2) {
+                        case []    -> false
+                        case m::ms -> if (compareItem(n,m))
+                                        compareXml(ns,ms)
+                                      else 
+                                        false
+                      }
+   }
+ }
+
+
+#sig stripNsAndAttrs : (XmlVariant) ~> XmlVariant
+fun stripNsAndAttrs (d) {
+  fun stripNsAndAttr (n) {
+    switch (n) {
+      case Node(t,c)     -> [Node(t,stripNsAndAttrs(c))]
+      case Attr(t,s)     -> []
+      case Text(t)       -> [Text(t)]
+      case NsAttr(t,s,r) -> []
+      case NsNode(t,s,l) -> []
+    }
+  }
+  switch (d) {
+    case []    -> []
+    case x::xs -> stripNsAndAttr(x)++stripNsAndAttrs(xs)
+  }
+}
+
+fun compareXmlType (t1,t2) {
+  compareXml(xmlToVariant(t1),xmlToVariant(t2))
+}
+
+fun compareXmlDb (d) { # add d to DB and compare
+  #dbEmpty();
+  # need to use sql script to empty database because transaction-time
+
+  ignore(xmlShred(d,initialSeg,"",true));
+  var dout = getCurrentNodesAndAttrs();
+  compareXml(xmlToVariant(d),reconstructXml(dout,true,false))
+}
+
+fun compareXmlRoundTrip (d) { # interaction with db for attributes
+  compareXml(xmlToVariant(d),reconstructXml(callSTL(d),true,false))
+}
+
+fun compareXmlRoundTripNA (d) { # no interaction with db
+  compareXml(stripNsAndAttrs(xmlToVariant(d)),reconstructXml(callSTL(d),false,false))
+}
+
+fun compareXmlInOutNA (din,dout) { # no interaction with db
+  compareXml(stripNsAndAttrs(xmlToVariant(din)),reconstructXml(dout,false,false))
+}
+
+fun variantFromDbNA () {
+  reconstructXml(getCurrentNodesAndAttrs(),false,false)
+}
+
+fun xmlFromDbNA () {
+  variantToXml(variantFromDbNA())
+}
+
+# ============================================================================
+# functions for inserting new document sections
+ 
+fun findNextSibling (l,dde) {
+  switch (l) {
+    case x1::[]     -> error("No more siblings")
+    case x1::x2::xs -> if (x1.dde==dde) 
+                         x2
+                       else
+                         findNextSibling(x2::xs,dde)
+  } 
+}
+
+fun findPrevSibling (l,dde) {
+  switch (l) {
+    case x1::[]     -> error("No more siblings")
+    case x1::x2::xs -> if (x2.dde==dde) 
+                         x1
+                       else
+                         findPrevSibling(x2::xs,dde)
+  } 
+}
+
+fun insertXmlPrep (dde,insert_before) { # sb will always contain dde 
+  var dd = query { for (x <-t- xml_node) [ttData(x)] }; # ignore time, deleted nodes stay deleted
+  var sb = sortUsingDdeSorter(for (x <- dd) where (ddeSibling(x.dde,dde)) [(dde=x.dde,ddeList=ddeSep(x.dde))]);
+  var path = hd(for (x <- dd) where (ddeParent(x.dde,dde)) [x]).path;  
+  if (hd(sb).dde==dde && insert_before) 
+    (dde,dde,path)
+  else if (last(sb).dde==dde && not(insert_before))
+    (dde,dde,path)
+  else if (insert_before && length(sb)>=2)
+    (findPrevSibling(sb,dde).dde,dde,path)
+  else if (not(insert_before) && length(sb)>=2)
+    (dde,findNextSibling(sb,dde).dde,path)
+  else
+    error("Insufficient siblings")
+}
+
+fun insertXml (x,dde,insert_before) {
+  var p = insertXmlPrep(dde,insert_before);
+  if (p.1==p.2 && insert_before) {
+     var new_dde = ddeBeforeSelf(dde)^^"."^^decSeg(ddeSelfSeg(dde));
+     xmlShred(x,new_dde,p.3,false)
+  } else if (p.1==p.2 && not(insert_before)) {
+     var new_dde = ddeBeforeSelf(dde)^^"."^^incSeg(ddeSelfSeg(dde));
+     xmlShred(x,new_dde,p.3,false)
+  } else {
+     var new_dde = ddeAdd(p.1,p.2);
+     xmlShred(x,new_dde,p.3,false)
+  }
+}
+
+fun insertXmlToNodeList (x,dde,insert_before) {
+  var p = insertXmlPrep(dde,insert_before);
+  var new_dde =
+    if (p.1==p.2 && insert_before) 
+      ddeBeforeSelf(dde)^^"."^^decSeg(ddeSelfSeg(dde))    
+    else if (p.1==p.2 && not(insert_before)) 
+      ddeBeforeSelf(dde)^^"."^^incSeg(ddeSelfSeg(dde))
+    else
+      ddeAdd(p.1,p.2);
+  shredToList(hd(xmlToVariant(x)),new_dde,p.3,false)
+}
+
+#=================================================================
+# functions to support the display of an xml document
+
+open import Mvu;
+open import MvuHTML;
+open import MvuAttrs;
+
+var h0 = MvuHTML.empty;
+var a0 = MvuAttrs.empty;
+
+var enabledAttr =
+  if (true) {
+    a0
+  } else {
+    MvuAttrs.attr("disabled", "disabled")
+  };
+
+var disabledAttr =
+  MvuAttrs.attr("disabled", "disabled");
+
+var whSpace = unescapedTextNode("&nbsp;&nbsp;");
+
+fun panel(name, contents) {
+  div(class("row mt-3"),
+    div(class("col-sm"),
+      div(class("card"),
+        div(class("card-header"), textNode(name)) +*
+          div(class("card-body"), contents))))
+}
+
+fun indent (s,n) {
+  unwords(replicate(s*n,"&nbsp"))
+}
+
+fun indentWithBar (s,n) {
+  if (s==0)
+    ""
+  else
+    unwords(replicate(s,"&#124;"^^unwords(replicate(n-1,"&nbsp"))))
+}
+
+fun updateHideShow (dde,x) {
+   if (x.dde==dde)
+     (x with hide=not(x.hide))
+   else
+     x
+}
+
+fun setShow(l,d) {
+  for (x <- l) [(x with hide=if (length(x.ddeList)==d) true else false)]
+}
+
+fun setHide(l) {
+  for (x <- l) [(x with hide=true)]
+}
+
+
+# ==================================================================================
+
+
+fun xmlDisplayFromVariant (xmlVar,sp,label) { # doesn't display attributes
+  fun renderDocRows(d,csp) {
+    fun renderDocItem(i,csp) {
+      fun renderText (t,csp) {
+        tr(a0,
+          td(a0, textNode("Text node")) +*
+          td(a0, unescapedTextNode(indent(csp,sp)^^t)) 
+        )
+      }
+      fun renderNode (t,c,csp) {
+        fun getDde (l) {
+          switch (l) {
+            case []    -> error("LinksDDE not found")
+            case x::xs -> switch (x) {
+                       case Attr(t,s) -> if (t=="LinksDDE") s
+                                         else getDde(xs)
+                       case _         -> getDde(xs)
+                     }
+          }
+        }
+        # ======
+        var d = getDde(c);
+        if (length(c)==1) {
+          tr(a0,
+            td(a0, textNode(d)) +*
+            td(a0, unescapedTextNode(indent(csp,sp)^^" &lt"^^t^^"/&gt>")) 
+          )
+        } else {
+          tr(a0,
+            #td(a0, textNode(d^^" (Open)")) +*
+            td(a0, textNode(d)) +*
+            td(a0, unescapedTextNode(indent(csp,sp)^^" &lt"^^t^^"&gt"))
+          )
+          +*
+          renderDocRows(c,csp+1)
+          #+*
+          #tr(a0,
+          #  #td(a0, textNode(d^^" (Close)")) +*
+          #  td(a0, textNode("")) +*
+          #  td(a0, unescapedTextNode(indent(csp,sp)^^" &lt/"^^t^^"&gt")) 
+          #)
+        }
+      }
+      # ======
+      switch (i) {
+        case Node(t,c)     -> renderNode(t,c,csp)
+        case Attr(t,s)     -> h0 # not yet implemented
+        case Text(t)       -> renderText(t,csp)
+        case NsAttr(t,s,r) -> h0
+        case NsNode(t,s,l) -> h0
+      }
+    }
+    #======
+    switch (d) {
+      case []    -> h0
+      case x::xs -> renderDocItem(x,csp) +* renderDocRows(xs,csp)
+    }
+  } 
+  # =======   
+
+  if (length(xmlVar)<>1) {
+    error("Expecting a singleton list of XmlVariant")
+  } else {
+    var docTable = {     
+      h5(class("card-title"),h0) +*
+      table_(class("table table-bordered table-sm"),
+      thead(class("thead-dark"),
+        tr(a0,
+        th(a0, textNode("Label")) +*
+        th(a0, textNode("Node")) 
+        )) +*
+        tbody(a0, renderDocRows(xmlVar,0)))
+    };
+  
+    div(class("container"),
+        h5(class("title"), textNode("XML document"^^label)) +* docTable)
+  }
+} 
+
+
+
+

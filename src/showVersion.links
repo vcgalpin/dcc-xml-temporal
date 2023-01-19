@@ -1,0 +1,218 @@
+
+open import StringUtilities;
+
+open import Mvu;
+open import MvuHTML;
+open import MvuAttrs;
+
+import Template;
+
+open import DdeHandling;
+
+open import XmlDocument;
+
+typename XmlList = (dde:String,ddeList:[Int],hide:Bool,original:Bool,
+                    path:String,path_id:Int,tag:String,text:String, 
+                    tt_from:DateTime,tt_to:DateTime, attrs: [Attr]);
+
+typename Model = (date: String, nodes:[XmlList], ready: Bool);
+        
+typename Message =
+    [| Hide:String | Show:String | EnterDate:String | ShowVersion | HideAll |
+       ShowAll | ShowTopTwoLevels | ShowTopThreeLevels | ShowTopFourLevels | ShowTopFiveLevels |];
+
+#============= DATA FUNCTIONS
+
+fun callGetNodesAndAttrsAtTime (s) { # server { # parseDate not defined on client yet
+  getNodesAndAttrsAtTime(parseDate(s))
+} 
+
+#============= UPDT
+
+  sig updt : (Message, Model) {}~> Model
+  fun updt(msg, model) {
+    switch(msg) {
+      case Hide(d) -> (model with nodes=map(curry(updateHideShow)(d),model.nodes))
+      case Show(d) -> (model with nodes=map(curry(updateHideShow)(d),model.nodes))
+
+      case EnterDate(d) -> (model with date=d)
+      case ShowVersion -> ((model with 
+                       nodes=getNodesAndAttrsAtTime(parseDate(model.date)))
+                       with ready=true)
+
+      case ShowAll -> (model with nodes=setShow(model.nodes,-1))
+      case HideAll -> (model with nodes=setHide(model.nodes))
+      case ShowTopTwoLevels -> (model with nodes=setShow(model.nodes,2))
+      case ShowTopThreeLevels -> (model with nodes=setShow(model.nodes,3))
+      case ShowTopFourLevels -> (model with nodes=setShow(model.nodes,4))
+      case ShowTopFiveLevels -> (model with nodes=setShow(model.nodes,5))
+    }
+  }
+
+#============= VIEW FUNCTIONS
+
+  var whSpace = unescapedTextNode("&nbsp;&nbsp;"); # also defined in xmlDisplay?
+
+  fun hideButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-sm") +@
+              onClick(fun() { Hide(dde) }),unescapedTextNode("+"))))
+  }
+
+  fun showButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-outline btn-sm") +@
+              onClick(fun() { Show(dde) }),unescapedTextNode("-"))))
+  }
+
+
+fun xmlDisplayFromNodeList (nodeList,sp,label) {
+  fun renderDocRows (l,hide_dde) {
+    fun renderAttrs (l,dl,sp) {
+      switch (l) {
+        case []    -> ""
+        case x::xs -> "<br>"^^indentWithBar(dl,sp)^^indent(2,1)^^x.attr^^"=\""^^x.value^^"\""^^renderAttrs(xs,dl,sp)
+      }
+    }
+    fun renderDocRow(x) {
+      var d = length(ddeSep(x.dde))-1;
+      var s = if (x.tag<>"") 
+                indentWithBar(d,sp)^^
+                  " &lt"^^x.tag^^renderAttrs(reverse(x.attrs),d,sp)^^"&gt "
+              else
+                indentWithBar(d,sp)^^x.text;
+      var b = if (x.tag=="")
+                h0
+              else if (x.hide)
+                hideButton(x.dde)
+              else
+                showButton(x.dde);                
+      tr(a0,
+        td(a0, unescapedTextNode(s)) +*
+        td(a0, b)
+      )
+    }
+    switch (l) {
+      case []    -> h0
+      case x::xs -> if (ddeAncestor(hide_dde,x.dde))
+                      renderDocRows(xs,hide_dde)
+                    else if (x.hide)
+                      renderDocRow(x) +* renderDocRows(xs,x.dde)
+                    else
+                      renderDocRow(x) +* renderDocRows(xs,"")
+    }   
+  }
+  # ====
+  
+  var showButtons = {
+      unescapedTextNode("&nbsp;"
+      ) +*
+      form(class("form-inline"),
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowAll }),textNode("Show all elements")))
+      ) +*
+      unescapedTextNode("&nbsp;"
+      ) +*
+      form(class("form-inline"),
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { HideAll }),textNode("Hide all elements"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopTwoLevels }),textNode("Show two levels"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopThreeLevels }),textNode("Show three levels"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFourLevels }),textNode("Show four levels")))  +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFiveLevels }),textNode("Show five levels")))
+      )
+  };
+  var docTable = {
+    if (nodeList==[])
+      h5(class("card-title"),unescapedTextNode("<br><br>The document has no content"))
+    else {
+      var rows = renderDocRows(nodeList,"");     
+      h5(class("card-title"),h0) +*
+      table_(class("table table-bordered table-sm"),
+      thead(a0,
+        tr(a0,
+        th(style("width: 98%"), textNode("Element")) +*
+        th(a0, textNode("")) 
+        )) +*
+        tbody(a0, rows))
+    }
+  };  
+  div(class("container-fluid"),
+      h4(class("title"), textNode("XML document"^^label)) +* showButtons +* docTable)   
+}
+
+#============= VIEW
+
+  sig view : (Model) ~> MvuHTML.HTML(Message)
+  fun view(model) {
+    var h0 = MvuHTML.empty;
+    var a0 = MvuAttrs.empty;
+
+    var enabledAttr =
+      if (true) {
+        MvuAttrs.empty
+      } else {
+        MvuAttrs.attr("disabled", "disabled")
+    };
+
+    fun renderModel(model) {
+      var dateForm = {
+        form(class("form-inline"),
+         div(class("form-group"),
+          label(for_("date"),
+            textNode("Enter date")) +*
+            input(type("text") +@
+            class("form-control mx-sm-3") +@
+            id("date") +@
+            value(model.date) +@
+            onInput(fun(x) { EnterDate(x) }), h0)) +*
+         div(class("form-group"),
+          button(type("button") +@ class("btn btn-primary") +@
+            enabledAttr +@ onClick(fun() { ShowVersion }),textNode("Display")))
+         )
+      };
+      if (not(model.ready)) {
+        div(class("container-fluid"),dateForm)
+      } else {
+        div(class("container-fluid"),
+          xmlDisplayFromNodeList(model.nodes,4,": version at "^^model.date)
+        )
+      }
+    }
+    renderModel(model)
+  }
+
+#============= MAIN
+
+  fun mainPage(d) {
+    var s = "2023-01-12 16:06:00"; # set a convenient date for date choice
+
+    var initialModel = 
+      if (d=="") (date=s,nodes=[],ready=false)
+      else (date=d,nodes=getNodesAndAttrsAtTime(parseDate(d)),ready=true);
+
+    runSimple("placeholder", initialModel, view, updt);
+    Template.template()
+  }
+
+  fun main() {
+    addRoute("/", fun(_) { mainPage("") });
+    addStaticRoute("/css", "css", [("css", "text/css")]);
+    addStaticRoute("/js", "js", [("js", "text/javascript")]);
+    serveWebsockets();
+    servePages()
+  }
+
+main()

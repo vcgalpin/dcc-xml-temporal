@@ -1,0 +1,317 @@
+# no analysis of attribute change yet
+
+# improve analysis functions to deal with deletions
+# merge itemCountAnalysis and analysisCount
+
+open import StringUtilities;
+
+open import Mvu;
+open import MvuHTML;
+open import MvuAttrs;
+
+import Template;
+
+open import DdeHandling;
+
+open import XmlDatabase;
+open import XmlDocument;
+
+typename Mod = (ddeList:[Int], tt_from:DateTime, tt_to:DateTime, tag:String, text:String, attrs:[Attr], original:Bool);
+
+typename XmlAnalysis = (ddeList:[Int], dde:String, hide:Bool, original:Bool, mods:[Mod],
+                        insertions: Int, deletions: Int, changes: Int, details: Bool,
+                        total_insertions: Int, total_deletions: Int, total_changes: Int);
+
+typename Model = (analysis:[XmlAnalysis]);
+        
+typename Message =
+    [| Hide:String | Show:String | ShowChanges | ShowDetails:String | HideDetails:String | HideAll |
+       ShowAll | ShowTopTwoLevels | ShowTopThreeLevels | ShowTopFourLevels | ShowTopFiveLevels |];
+
+#============= DATA MANIPULATION FUNCTIONS
+
+  fun performAnalysis (l) {
+    fun createNewRow (x) { 
+
+      (ddeList=x.ddeList,dde=x.dde,hide=x.hide,original=false,details=false,
+       insertions=0,changes=0,deletions=0,
+       total_insertions=0,total_changes=0,total_deletions=0,
+       mods=[(ddeList=x.ddeList,tt_from=x.tt_from,tt_to=x.tt_to,
+              tag=x.tag,text=x.text,attrs=x.attrs,original=x.original)])
+    }
+    fun transformToAnalysis (l,current_row) {
+      fun addModToRow (curr,x) {
+        (curr with mods=curr.mods++[(ddeList=x.ddeList,tt_from=x.tt_from,tt_to=x.tt_to,
+                                     tag=x.tag,text=x.text,attrs=x.attrs,original=x.original)])
+      } 
+      fun sortMods (r) {
+        var m = for (x <- r.mods) orderby (x.tt_from) [x]; # row is original whenever the first
+        ((r with mods = m) with original=hd(m).original)   # mod is original
+      }   
+      switch (l) {
+        case []    -> [sortMods(current_row)]
+        case x::xs -> if (x.ddeList == current_row.ddeList)
+                        transformToAnalysis(xs,addModToRow(current_row,x))
+                      else
+                        sortMods(current_row)::transformToAnalysis(xs,createNewRow(x))
+      }
+    }
+    fun itemCountAnalysis (l) { # should be merged with analysisCount
+      switch (l) {
+        case []    -> []
+        case x::xs -> var i = if (x.original) 0 else 1;
+                      var c = length(x.mods)-1;
+                      ((x with insertions=i) with changes=c)::
+                        itemCountAnalysis(xs)
+      }
+    }
+    fun analysisCount (l,ch) { # c is a list recording children's counts      
+      fun addCounts (i1,c1,i2,c2,ch,l,x) {
+        analysisCount(l,(dde=x.dde,ins=i1,chs=c1)::ch) ++
+          [((x with total_insertions=i2) with total_changes=c2)]
+      }
+      switch (l) {
+        case []    -> []
+        case x::xs -> var i = if (x.original) 0 else 1;
+                      var c = length(x.mods)-1;
+                      #println(show(ch));
+
+                      switch (ch) {
+                        case []         -> addCounts(i,c,i,c,[],xs,x)
+                        case y::[]      -> if (ddeParent(x.dde,y.dde))
+                                             addCounts(i+y.ins,c+y.chs,i+y.ins,c+y.chs,[],xs,x)
+                                           else 
+                                             addCounts(i,c,i,c,ch,xs,x)
+                        case y1::y2::ys -> if (ddeParent(x.dde,y1.dde) && ddeSibling(x.dde,y2.dde))
+                                             addCounts(i+y1.ins+y2.ins,c+y1.chs+y2.chs,i+y1.ins,c+y1.chs,ys,xs,x)
+                                           else if (ddeParent(x.dde,y1.dde))
+                                             addCounts(i+y1.ins,c+y1.chs,i+y1.ins,c+y1.chs,y2::ys,xs,x)
+                                           else {
+                                             println("third option");
+                                             addCounts(i,c,i,c,ch,xs,x)
+                                           }
+                      }    
+       }
+    }
+    var a = transformToAnalysis(tl(l),createNewRow(hd(l)));
+    analysisCount(reverse(itemCountAnalysis(a)),[])
+  }
+
+#============= UPDATE FUNCTIONS
+
+fun setShowChanges (l) { # specific to change analysis
+  fun showUp (l,show_dde) {
+    switch (l) {
+      case []    -> []
+      case x::xs -> if (ddeAncestor(x.dde,show_dde))
+                      showUp(xs,show_dde)++[(x with hide=false)]
+                    else if (length(x.mods)==1 && x.original)
+                      showUp(xs,show_dde)++[(x with hide=true)]
+                    else
+                      showUp(xs,x.dde)++[(x with hide=false)]
+    }    
+  }
+  var b = reverse(l);
+  showUp(b,"")
+}
+
+fun setDetails (dde,l) { # specific to change analysis
+   for (x <- l) [(x with details = if (x.dde==dde) not(x.details)
+                                   else (x.details))]
+}
+
+#============= UPDT
+
+  sig updt : (Message, Model) {}~> Model
+  fun updt(msg, model) {
+    switch(msg) {
+      case Hide(d) -> (model with analysis=map(curry(updateHideShow)(d),model.analysis))
+      case Show(d) -> (model with analysis=map(curry(updateHideShow)(d),model.analysis))
+      case ShowAll -> (model with analysis=setShow(model.analysis,-1))
+      case HideAll -> (model with analysis=setHide(model.analysis))
+
+      case ShowTopTwoLevels -> (model with analysis=setShow(model.analysis,2))
+      case ShowTopThreeLevels -> (model with analysis=setShow(model.analysis,3))
+      case ShowTopFourLevels -> (model with analysis=setShow(model.analysis,4))
+      case ShowTopFiveLevels -> (model with analysis=setShow(model.analysis,5))
+
+      case ShowChanges -> (model with analysis=setShowChanges(model.analysis))
+
+      case ShowDetails(d) -> (model with analysis=setDetails(d,model.analysis))
+      case HideDetails(d) -> (model with analysis=setDetails(d,model.analysis))
+    }
+  }
+
+#============= VIEW FUNCTIONS
+
+  fun hideButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-sm") +@
+              onClick(fun() { Hide(dde) }),unescapedTextNode("+"))))
+  }
+
+  fun showButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-outline btn-sm") +@
+              onClick(fun() { Show(dde) }),unescapedTextNode("-"))))
+  }
+
+  fun showDetailsButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn btn-sm") +@ 
+              onClick(fun() { ShowDetails(dde) }),unescapedTextNode("Show Details"))))
+  }
+
+  fun hideDetailsButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn btn-sm") +@ 
+              onClick(fun() { HideDetails(dde) }),unescapedTextNode("Hide Details"))))
+  }
+
+
+fun xmlDisplayFromAnalysisList (l,sp,label) {
+  fun renderDocRows (l,hide_dde) {
+    fun renderDocRow (x) {
+      fun renderDetailRow (r) {
+        tr(class("table-warning"),
+          td(a0, textNode(show(r.tt_from))) +*
+          td(a0, if (r.tag<>"") unescapedTextNode("&lt"^^r.tag^^"&gt") else h0) +*
+          td(a0, textNode(r.text))          
+        )
+      }
+      var rows = concatMap(renderDetailRow,reverse(x.mods));  
+      var detailTable = {
+        table_(class("table table-bordered table-sm"),
+        thead(a0,
+          tr(class("table-warning"),
+          th(style("width: 25%"), textNode("Date of modification")) +*
+          th(style("width: 30%"), textNode("Tag")) +*
+          th(style("width: 45%"), textNode("Text"))
+          )) +*
+          tbody(a0, rows) +* 
+          tr(class("table-active"),td(a0,h0)+*td(a0,h0)+*td(a0,h0)))
+      };
+      var s = if (last(x.mods).tag<>"") 
+                indentWithBar(length(ddeSep(x.dde))-1,sp)^^" &lt"^^last(x.mods).tag^^"&gt "
+              else
+                indentWithBar(length(ddeSep(x.dde))-1,sp)^^last(x.mods).text;
+      var b = if (last(x.mods).tag=="")
+                h0
+              else if (x.hide)
+                hideButton(x.dde)
+              else
+                showButton(x.dde);
+
+      var attr = if (length(x.mods)==1 && x.original ) a0
+                 else class("table-warning");      
+      tr(attr,          
+        td(a0, unescapedTextNode(s)) +*
+        td(a0, b) +*
+        td(a0, textNode(intToString(x.insertions)^^"  ("^^intToString(x.total_insertions)^^")")) +*
+        td(a0, textNode(intToString(x.changes)^^"  ("^^intToString(x.total_changes)^^")")) +*
+        td(a0, if (x.details) hideDetailsButton(x.dde) else showDetailsButton(x.dde))
+      )
+      +* (if (not(x.details)) h0 else detailTable)
+    }
+    switch (l) {
+      case []    -> h0
+      case x::xs -> if (ddeAncestor(hide_dde,x.dde))
+                      renderDocRows(xs,hide_dde)
+                    else if (x.hide)
+                      renderDocRow(x) +* renderDocRows(xs,x.dde)
+                    else
+                      renderDocRow(x) +* renderDocRows(xs,"")
+    }   
+  }
+  # =====
+  var rows = renderDocRows(l,"");
+
+  var showButtons = {
+      unescapedTextNode("&nbsp;"
+      ) +*
+      form(class("form-inline"),      
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowChanges }),textNode("Show changes"))) +* whSpace +*
+
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowAll }),textNode("Show all elements")))
+      ) +*
+      unescapedTextNode("&nbsp;"
+      ) +*
+
+      form(class("form-inline"),
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@ #MvuAttrs.attr("disabled", "disabled") +@
+              onClick(fun() { HideAll }),textNode("Hide all elements"))) +* whSpace +*
+
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopTwoLevels }),textNode("Show two levels"))) +* whSpace +*
+
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopThreeLevels }),textNode("Show three levels"))) +* whSpace +*
+
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFourLevels }),textNode("Show four levels")))  +* whSpace +*
+
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFiveLevels }),textNode("Show five levels")))
+      )
+  };
+  var docTable = {     
+    h5(class("card-title"),h0) +*
+    table_(class("table table-bordered table-sm"),
+    thead(a0,
+      tr(a0,
+      th(style("width: 70%"), textNode("Element")) +*
+      th(a0, textNode("")) +*
+      th(a0, textNode("Insertions")) +*
+      th(a0, textNode("Changes")) +*
+      th(style("width: 8%"),h0)
+      )) +*
+      tbody(a0, rows))
+  };  
+  div(class("container-fluid"),
+      h4(class("title"), textNode("XML document"^^label)) +* showButtons +* docTable)   
+  }
+
+#============= VIEW
+
+  sig view : (Model) ~> MvuHTML.HTML(Message)
+  fun view(model) {
+    
+    fun renderModel(model) {      
+      xmlDisplayFromAnalysisList(model.analysis,4,": change analysis")
+    }
+    renderModel(model)
+  }
+
+#============= MAIN
+
+  fun mainPage() {
+    var s = performAnalysis(getAllNodesAndAttrs());
+    var initialModel = (analysis=setShowChanges(s)); 
+    runSimple("placeholder", initialModel, view, updt);
+    Template.template()
+  }
+
+  fun main() {
+    addRoute("/", fun(_) { mainPage() });
+    addStaticRoute("/css", "css", [("css", "text/css")]);
+    addStaticRoute("/js", "js", [("js", "text/javascript")]);
+    serveWebsockets();
+    servePages()
+  }
+
+main()
+
+

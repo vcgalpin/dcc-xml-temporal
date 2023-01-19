@@ -1,0 +1,25 @@
+# main program for Xml Document Curation
+
+open import ShowVersion;
+open import CompareVersions;
+open import ChangeAnalysis;
+
+# open import EditCurrent; # not complete
+
+fun main() {
+  addRoute("/", fun(_) { ShowVersion.mainPage(show(now())) });
+  addRoute("/currentVersion", fun(_) { ShowVersion.mainPage(show(now())) });
+  addRoute("/previousVersion", fun(_) { ShowVersion.mainPage("") });
+  addRoute("/compareVersions", fun(_) { CompareVersions.mainPage() });
+  addRoute("/changeAnalysis", fun(_) { ChangeAnalysis.mainPage() });
+
+  # addRoute("/editCurrent", fun(_) { EditCurrent.mainPage() });
+
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  addStaticRoute("/js", "js", [("js", "text/javascript")]);
+  addStaticRoute("/images", "images", [("css", "image/png")]);
+  serveWebsockets();
+  servePages()
+}
+
+main()

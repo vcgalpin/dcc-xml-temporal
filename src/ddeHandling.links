@@ -1,0 +1,236 @@
+open import StringUtilities;
+
+# some functions have not been well-tested on inserted material that have ddes obtained
+# from other ddes by adding segments together, slightly better now but still more testing needed
+
+# parameters for extended dewey encoding (dde) which consists of a number of segments of fixed 
+# length strings, where each segment represents a positive or negative integer
+
+# defined by the regular expression
+# [+/-][0..9]...[0..9] (.[+/-][0..9]...[0..9])*
+# where the number of digits is segmentLength-1
+
+var segmentLength = 4; # length of each segment in a dde string, includes a initial + or -
+var separator = ".";   # separator between dde strings
+
+# ============================================================================
+# functions for manipulating ddes
+
+fun intToSeg (i) { # now extended to deal with negative numbers
+  var sgn = if (i>=0) { "+" } else { "-" };
+  var str = intToString(abs(i));
+  var len = strLen(str);
+  if (len>=segmentLength) {
+     #sgn^^strDrop(len-segmentLength+1,str);
+     error("Too many digits for segment length")
+  } else {
+     sgn^^implode(replicate(segmentLength-len-1,'0'))^^str
+  }
+}
+
+var initialSeg = intToSeg(1);
+
+fun segToInt (s) {
+  stringToInt(s)
+}
+
+fun incSeg (s) {
+  intToSeg(segToInt(s)+1)
+}
+
+fun decSeg (s) {
+  intToSeg(segToInt(s)-1)
+}
+
+fun segJoin (l) { # create a dde string from a list of segment strings
+  switch (l) {
+    case x::[] -> x
+    case x::xs -> x^^separator^^segJoin(xs)
+  }
+}
+
+fun intListToDde (l) {
+  segJoin(map(intToSeg,l))
+}
+
+fun ddeSep (str) { # create a list of integers from a dde string
+  fun ddeList (str) {
+    if (strLen(str)==segmentLength) {
+      [ segToInt(str) ]
+    } else {
+      segToInt(strTake(segmentLength,str))::
+      ddeList(strDrop(segmentLength+1,str))
+    }
+  }
+  if (mod(strLen(str),segmentLength+1) <> segmentLength) {
+    []
+  } else {
+    ddeList(str)
+  }
+} 
+
+fun ddeLen (str) {
+  if (mod(strLen(str),segmentLength+1) == segmentLength)
+    (strLen(str)/(segmentLength+1))+1
+  else error("Unexpected dde string length")
+}
+
+fun ddeSelfSeg (str) {
+  if (strLen(str)>segmentLength)
+    strDrop(strLen(str)-(segmentLength),str)
+  else str
+}
+
+fun ddeBeforeSelf (str) {
+  if (strLen(str)>segmentLength)
+    strTake(strLen(str)-(segmentLength+1),str)
+  else ""
+}
+
+# this is not correct for inserted nodes
+# an explicit scan of the DB is required
+#fun ddeGetParent (str) {
+#  if (strLen(str)>segmentLength)
+#    strTake(strLen(str)-(segmentLength+1),str)
+#  else ""
+#}
+
+fun ddeAdd (dde1,dde2) {
+  var sums = map(fun (x){x.1+x.2},zip(ddeSep(dde1),ddeSep(dde2)));
+  segJoin(map(intToSeg,sums))
+}
+
+fun checkCond(l1,l2) {
+  fun checkLists(l) {
+    switch (l) {
+      case (x::[],y::[])   -> true
+      case (x1::x2::xs,y1::y2::ys) -> 
+        if ((x1<>0 && x2<>0 && y1<>0 && y2<>0 && x1*y2==x2*y1) || 
+            (x1==0 && x2==0 && y1==y2) ||
+            (y1==0 && y2==0 && x1==x2))
+          checkLists((x2::xs,y2::ys))
+        else
+          false
+    }
+  }
+  if (length(l1)<>length(l2)) error("Lists should be the same length: checkCond")
+  else checkLists ((l1,l2))
+}
+
+fun ddeListAncestor (s1,s2) {
+  var m = length(s1);
+  if (s1==[] || s2==[] || 
+      not(m < length(s2)))
+    false
+  else
+    checkCond(s1,take(m,s2))
+}
+
+fun ddeListParent (s1,s2) {
+  var m = length(s1);
+  if (s1==[] || s2==[] ||
+      not(m+1==length(s2)))
+    false
+  else
+    checkCond(s1,take(m,s2))
+}
+
+fun ddeListSibling (s1,s2) {
+  var m = length(s1);
+  if (s1==[] || s2==[] ||
+      not(m==length(s2)))
+    false
+  else
+    checkCond(take(m-1,s1),take(m-1,s2))
+}
+
+fun ddeAncestor(d1,d2) {
+  ddeListAncestor(ddeSep(d1),ddeSep(d2))
+}
+
+fun ddeParent(d1,d2) {
+  ddeListParent(ddeSep(d1),ddeSep(d2))
+}
+
+fun ddeSibling(d1,d2) {
+  ddeListSibling(ddeSep(d1),ddeSep(d2))
+}
+
+# ====================================================================
+# sorting functions that determine maxK more directly
+# this approach could be used above in findMaxK
+# but a better approach is to write the relationship checks more directly
+
+
+fun ddeOrderFast (s1,s2) {
+  fun ddeOrderFastUpToK (l1,l2) { 
+    switch (l1) {   
+      case x1::[]     -> 
+        switch (l2) {
+         case x2::[]  -> if (x1==x2)
+                           false # cond + K=len(s1)=len(s2), so incomparable
+                         else if (x1 < x2) # this catches the case when the second last                                 
+                           true            # elements of both list are zero
+                         else 
+                           false
+          case x2::xs -> true  # cond + K=len(s1)<len(s2)
+          case []     -> error("List should not be empty")
+        }
+      case x1::y1::xy1 -> 
+        switch (l2) {
+          case x2::[]      -> false # K=len(s2)<len(s1)
+          case x2::y2::xy2 -> if ((x1<>0 && x2<>0 && y1<>0 && y2<>0 && x1*y2==x2*y1) || 
+                                  (x1==0 && x2==0 && y1==y2) ||
+                                  (y1==0 && y2==0 && x1==x2))
+                                ddeOrderFastUpToK(y1::xy1,y2::xy2)
+                              else if (x1<>0 && x2<>0 && y1<>0 && y2<>0)
+                                x2*y1 < x1*y2
+                              else
+                                y1 < y2
+          case []          -> error("List should not be empty")
+       }
+     case []         -> error("List should not be empty")
+    }
+  }
+  if (s1<>s2)
+    ddeOrderFastUpToK(s1,s2)
+  else
+    false
+}
+
+fun mergeSorted (l) {
+  fun mergeTwoLists (l1,l2) {
+    if (l1==[])
+      l2
+    else if (l2==[])
+      l1
+    else if (ddeOrderFast(hd(l1).ddeList,hd(l2).ddeList))
+      hd(l1)::mergeTwoLists(tl(l1),l2)
+    else
+      hd(l2)::mergeTwoLists(l1,tl(l2))
+  }
+  fun mergeLists (ls) {
+    switch (ls) {
+      case []    -> []
+      case x::xs -> mergeTwoLists(x, mergeLists(xs))
+    } 
+  }
+  fun findSorted (l,curr) {
+    switch (l) {
+      case []    -> [curr]
+      case x::xs -> if (ddeOrderFast(last(curr).ddeList,x.ddeList))
+                      findSorted(xs,curr++[x])
+                    else 
+                      findSorted(xs,[x])++[curr]
+    }
+  }
+  mergeLists(findSorted(tl(l),[hd(l)])) # could sort by length of lists before merging
+}
+
+fun sortUsingDdeSorter (l) {
+   mergeSorted(l)
+}
+
+fun ddeFunCompare (d1,d2,f) {
+  (f(d1,d2),f(d2,d1))
+}

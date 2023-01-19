@@ -1,0 +1,11 @@
+fun strTake (i,s) { # String level version of take
+  implode(take(i,explode(s)))
+}
+
+fun strDrop (i,s) { # String level version of drop
+  implode(drop(i,explode(s)))
+}
+
+fun strLen (s) { # String level version of length
+  length(explode(s))
+}

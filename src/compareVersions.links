@@ -1,0 +1,294 @@
+
+open import StringUtilities;
+
+open import Mvu;
+open import MvuHTML;
+open import MvuAttrs;
+
+import Template;
+
+open import DdeHandling;
+
+open import XmlDocument;
+
+typename XmlCompare = (dde:String,match:Bool,str1:String,str2:String,hide:Bool,ddeList:[Int]);
+
+typename Model = (date1: String, date2: String, cmps:[XmlCompare], ready: Bool);
+        
+typename Message =
+    [| EnterDate1:String | EnterDate2:String | CompareVersions | HideAll |
+       Hide:String | Show:String | ShowChanges |
+       ShowAll | ShowTopTwoLevels | ShowTopThreeLevels | ShowTopFourLevels | ShowTopFiveLevels |];
+
+#============= DATA FUNCTIONS
+
+fun renderTagOrText (x) {
+  fun renderAttrs (l) {
+    switch (l) {
+      case []    -> ""
+      case x::xs -> " "^^x.attr^^"=\""^^x.value^^"\""^^renderAttrs(xs)
+    }
+  }
+  if (x.tag<>"" && x.text<>"")
+     error("both tag and text are non-empty strings")
+  else if (x.text<>"")
+     indentWithBar(length(ddeSep(x.dde))-1,2)^^x.text
+  else
+     indentWithBar(length(ddeSep(x.dde))-1,2)^^" &lt"^^x.tag^^renderAttrs(x.attrs)^^"&gt "
+}
+
+fun createCompareList (l1,l2) {
+   fun addBothItems(i1,i2) {
+     var s1 = renderTagOrText(i1);
+     var s2 = renderTagOrText(i2);
+     if (s1==s2) {
+       (dde=i1.dde,match=true,str1=s1,str2=s2,ddeList=ddeSep(i1.dde),hide=false)
+     } else {
+       (dde=i1.dde,match=false,str1=s1,str2=s2,ddeList=ddeSep(i1.dde),hide=false)
+     }
+   }
+   fun addLeftItems(l) {
+     switch (l) {
+       case []    -> []
+       case x::xs -> (dde=x.dde,match=false,str1=renderTagOrText(x),str2="",ddeList=ddeSep(x.dde),hide=false)::
+                       addLeftItems(xs)
+     }
+    }
+   fun addRightItems(l) {
+     switch (l) {
+       case []    -> []
+       case x::xs -> (dde=x.dde,match=false,str1="",str2=renderTagOrText(x),ddeList=ddeSep(x.dde),hide=false)::
+                       addRightItems(xs)
+     }
+    }
+   # ====
+   switch (l1) {
+     case []      -> if (l2==[]) [] else addRightItems(l2)
+     case x1::xs1 -> switch (l2) {
+                       case []      -> addLeftItems(l2)
+                       case x2::xs2 -> if (x1.dde==x2.dde)
+                                         addBothItems(x1,x2)::createCompareList(xs1,xs2)
+                                       else if (ddeOrderFast(ddeSep(x1.dde),ddeSep(x2.dde))) # fix this
+                                         addLeftItems([x1])++createCompareList(xs1,l2)
+                                       else
+                                         addRightItems([x2])++createCompareList(l1,xs2)
+                     }
+   }
+}
+
+fun getComparison (model) server {
+  var d1 = getNodesAndAttrsAtTime(parseDate(model.date1));
+  var d2 = getNodesAndAttrsAtTime(parseDate(model.date2));
+  createCompareList(d1,d2)
+} 
+
+#============= UPDT FUNCTIONS
+
+fun setShowChanges (l) { # specific to comparison
+  fun showUp (l,show_dde) {
+    switch (l) {
+      case []    -> []
+      case x::xs -> if (ddeAncestor(x.dde,show_dde))
+                      showUp(xs,show_dde)++[(x with hide=false)]
+                    else if (x.match)
+                      showUp(xs,show_dde)++[(x with hide=true)]
+                    else
+                      showUp(xs,x.dde)++[(x with hide=false)]
+    }    
+  }
+  var b = reverse(l);
+  showUp(b,"")
+}
+
+#============= UPDT
+
+  sig updt : (Message, Model) {}~> Model
+  fun updt(msg, model) {
+    switch(msg) {
+      case EnterDate1(d) -> (model with date1=d)
+      case EnterDate2(d) -> (model with date2=d)
+      case CompareVersions -> ((model with cmps=getComparison(model)) with ready=true)
+
+      case Hide(d) -> (model with cmps=map(curry(updateHideShow)(d),model.cmps))
+      case Show(d) -> (model with cmps=map(curry(updateHideShow)(d),model.cmps))
+
+      case HideAll -> (model with cmps=setHide(model.cmps))
+      case ShowAll -> (model with cmps=setShow(model.cmps,-1))
+      case ShowTopTwoLevels -> (model with cmps=setShow(model.cmps,2))
+      case ShowTopThreeLevels -> (model with cmps=setShow(model.cmps,3))
+      case ShowTopFourLevels -> (model with cmps=setShow(model.cmps,4))
+      case ShowTopFiveLevels -> (model with cmps=setShow(model.cmps,5))
+
+      case ShowChanges -> (model with cmps=setShowChanges(model.cmps))
+    }
+  }
+
+#============= VIEW FUNCTIONS
+
+
+var whSpace = unescapedTextNode("&nbsp;&nbsp;"); # also defined in xmlDisplay?
+
+  fun hideButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-sm") +@
+              onClick(fun() { Hide(dde) }),unescapedTextNode("+"))))
+  }
+
+  fun showButton (dde) {
+    form(class("form-inline"),
+           div(class("form-group"),
+            button(type("button") +@ class("btn btn-outline btn-sm") +@
+              onClick(fun() { Show(dde) }),unescapedTextNode("-"))))
+  }
+
+var showButtons = {
+      unescapedTextNode("&nbsp;"
+      ) +*
+      form(class("form-inline"),      
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowChanges }),textNode("Show changes"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowAll }),textNode("Show all elements")))
+      ) +*
+      unescapedTextNode("&nbsp;"
+      ) +*
+      form(class("form-inline"),
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@ #MvuAttrs.attr("disabled", "disabled") +@
+              onClick(fun() { HideAll }),textNode("Hide all elements"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopTwoLevels }),textNode("Show two levels"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopThreeLevels }),textNode("Show three levels"))) +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFourLevels }),textNode("Show four levels")))  +* whSpace +*
+        div(class("form-group"),
+            button(type("button") +@ class("btn btn-primary") +@
+              onClick(fun() { ShowTopFiveLevels }),textNode("Show five levels")))
+      )
+  };
+
+
+fun comparisonDisplay (model) {
+  fun renderDisplayRows(l,hide_dde) {
+    fun renderDisplayRow(x) {
+      var b = if (x.hide)
+                hideButton(x.dde)
+              else
+                showButton(x.dde);
+      var attr = if (x.match) a0
+                 else class("table-warning");      
+      tr(attr,
+        td(a0, unescapedTextNode(x.str1)) +*
+        td(a0, b) +*
+        td(a0, unescapedTextNode(x.str2)) 
+      )
+    }
+    switch (l) {
+      case []    -> h0
+      case x::xs -> if (ddeAncestor(hide_dde,x.dde))
+                      renderDisplayRows(xs,hide_dde)
+                    else if (x.hide)
+                      renderDisplayRow(x) +* renderDisplayRows(xs,x.dde)
+                    else
+                      renderDisplayRow(x) +* renderDisplayRows(xs,"")
+    }       
+  }   
+  # =====
+  var rows = renderDisplayRows(model.cmps,"");
+
+  var docTable = {
+    if (model.cmps==[])
+      h5(class("card-title"),unescapedTextNode("<br><br>The document has no content at "^^model.date1^^" and "^^model.date2))
+    else {     
+      h5(class("card-title"),h0) +*
+      table_(class("table table-bordered table-sm"),
+      thead(a0,
+        tr(a0,
+        th(style("width: 49%"), textNode(model.date1)) +*
+        th(style("width: 2%"), textNode("")) +*
+        th(style("width: 49%"), textNode(model.date2)) 
+        )) +*
+        tbody(a0, rows))
+     }
+  };  
+  div(class("container-fluid"),
+      h4(class("title"), textNode("XML document comparison")) +* showButtons +* docTable)   
+}
+
+#============= VIEW
+
+  sig view : (Model) ~> MvuHTML.HTML(Message)
+  fun view(model) {
+    var h0 = MvuHTML.empty;
+    var a0 = MvuAttrs.empty;
+
+    var enabledAttr =
+      if (true) {
+        MvuAttrs.empty
+      } else {
+        MvuAttrs.attr("disabled", "disabled")
+    };
+
+    fun renderModel(model) {
+      var dateForm = {
+        form(class("form-inline"),
+         div(class("form-group"),
+          label(for_("firstdate"),
+            textNode("Enter first date")) +*
+            input(type("text") +@
+            class("form-control mx-sm-3") +@
+            id("firstdate") +@
+            value(model.date1) +@
+            onInput(fun(x) { EnterDate1(x) }), h0)) +*
+         
+         div(class("form-group"),
+          label(for_("seconddate"),
+            unescapedTextNode("&nbsp &nbsp Enter second date")) +*
+            input(type("text") +@
+            class("form-control mx-sm-3") +@
+            id("seconddate") +@
+            value(model.date2) +@
+            onInput(fun(x) { EnterDate2(x) }), h0)) +*
+         div(class("form-group"),
+          button(type("button") +@ class("btn btn-primary") +@
+            enabledAttr +@ onClick(fun() { CompareVersions }),textNode("Compare")))
+         )
+      };
+      if (not(model.ready)) {
+        div(class("container-fluid"),dateForm)
+      } else {
+        comparisonDisplay(model)
+      }
+    }
+    renderModel(model)
+  }
+
+#============= MAIN
+
+  fun mainPage() {
+    
+    #var s1 = "2021-09-10 11:00:00"; # set a convenient date for date choice
+    var s1 = "2021-09-12 10:00:00"; # set a convenient date for date choice
+    var s2 = strTake(16,show(now()))^^":00";
+
+    var initialModel = (date1 = s1, date2 = s2, cmps=[], ready=false);  
+    runSimple("placeholder", initialModel, view, updt);
+    Template.template()
+  }
+
+  fun main() {
+    addRoute("/", fun(_) { mainPage() });
+    addStaticRoute("/css", "css", [("css", "text/css")]);
+    addStaticRoute("/js", "js", [("js", "text/javascript")]);
+    serveWebsockets();
+    servePages()
+  }
+
+main()

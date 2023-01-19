@@ -1,0 +1,2 @@
+var db = database "anon_dcc";
+#var db = database "<database-name>";
