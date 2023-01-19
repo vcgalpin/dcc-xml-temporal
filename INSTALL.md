@@ -10,7 +10,7 @@ For MacOS users, both opam and PostgreSQL can be installed via *[HomeBrew](https
 Second, a PostgreSQL database is created with the command
 ```
 $ psql -c "CREATE DATABASE dcc_anon;" 
-$ psql -d dcc_anon -f ccSetup_dcc_anon.sql 
+$ psql -d dcc_anon -f setup_dcc_anon.sql 
 ```
 Next, the file `config.0.9.7` is edited to replace `<username>` and `<password>` with the appropriate PostgreSQL username and password respectively. It may also be necessary to modify the PostgreSQL port from 5432, depending on the setup.
 For more information about database setup, see **[points 4 to 6 here](https://github.com/links-lang/links/wiki/Database-setup)**.
@@ -56,7 +56,7 @@ This functionality is not yet implemented.
 If you wish to upload your own XML document, you can do the following. First create a new database and set up the database tables without content.
 ```
 $ psql -c "CREATE DATABASE xml_doc;" 
-$ psql -d xml_doc -f ccSetup.sql 
+$ psql -d xml_doc -f setupXml.sql 
 ```
 Assuming you have the document in a text file called doc.xml, use the following Unix command to remove all spaces and add appropriate Links code
 ```
