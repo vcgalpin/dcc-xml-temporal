@@ -274,7 +274,7 @@ fun comparisonDisplay (model) {
 
   fun mainPage() {
     
-    var s1 = "2022-01-19 20:22:40"; # set a convenient date for date choice
+    var s1 = "2022-01-18 20:22:40"; # set a convenient date for date choice
     var s2 = strTake(16,show(now()))^^":00";
 
     var initialModel = (date1 = s1, date2 = s2, cmps=[], ready=false);  

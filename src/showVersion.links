@@ -197,7 +197,7 @@ fun xmlDisplayFromNodeList (nodeList,sp,label) {
 #============= MAIN
 
   fun mainPage(d) {
-    var s = "2023-01-18 22:22:00"; # set a convenient date for date choice
+    var s = "2022-01-18 20:22:40"; # set a convenient date for date choice
 
     var initialModel = 
       if (d=="") (date=s,nodes=[],ready=false)
