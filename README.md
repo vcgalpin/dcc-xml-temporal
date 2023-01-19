@@ -8,11 +8,10 @@ Furthermore, there is no checking for the input of date formats and a string tha
 
 ### Temporal database usage
 
-This prototype uses Links temporal database features which work with a standard PostgreSQL database as the backend, and a database containing a sample DCC with modifications is provided.
-
-A DCC (or other XML document) can be loaded and mapped to a relational database structure using the Extended Dewey labelling scheme. This labels each node in the XML document with a unique key in dot-decimal notation, and provides an ordering that captures the tree structure of the XML document. 
-
-Currently, the editing of the document is not supported. However, it is possible to insert new nodes into the XML document using the REPL, and also to edit the document using psql and SQL commands. INSTALL.md describes these how these can be achieved.
+This prototype uses Links temporal database features which work with a standard PostgreSQL database as the backend. It also uses the [Dynamic Dewey](https://doi.org/10.1145/1559845.1559921)
+ (DDE) labelling scheme to uniquely label each node in an XML document and thereby provide a key for storing the node in a relational table. Using these together, it is possible to use store an XML document in a relational temporal databases -- see more details in [this paper](https://www.imeko.org/publications/tc6-2022/IMEKO-TC6-2022-024.pdf).
+ 
+A PostgreSQL database is provided containing a sample DCC with modifications to illustrate the use of the prototype. Installation instructions are [here](INSTALL.md).
 
 ### User interface
 
@@ -28,4 +27,4 @@ Typically, the database interactions occur when the initial model
 is defined, and when the update function calls the functions it
 needs for modifying the model, leading to a separation of concerns.
 
-![Screenshot](https://github.com/XAZKQV26IL/covid-curation/blob/99ee55569e20d009042b5197523927ec8e7fb6e9/src/images/screenshot1.png)
+![Screenshot](new_screenshot.png)
