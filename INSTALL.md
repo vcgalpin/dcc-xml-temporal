@@ -1,6 +1,6 @@
 # Installation
 
-First, install Links using *[opam](https://opam.ocaml.org)*. This requires the Ocaml 4.08.0 compiler - see **[here](https://opam.ocaml.org/doc/Usage.html#opam-switch)** for more information on how to specifiy compiler version in opam.
+First, install Links using *[opam](https://opam.ocaml.org)*. This requires the OCaml 4.08.0 compiler - see **[here](https://opam.ocaml.org/doc/Usage.html#opam-switch)** for more information on how to specifiy compiler version in opam.
 Since the prototype requires a *[PostgreSQL](https://www.postgresql.org)*-supporting installation of Links, the following command is used.
 ```
 $ opam install links-postgresql
