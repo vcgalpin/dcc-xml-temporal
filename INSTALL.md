@@ -72,6 +72,7 @@ links> @load "xmlDocument.links";
 links> @load "doc.links";
 links> xmlShred(doc,initialSeg,"",true)
 ```
+Edit the file `nameOfDB.links` to set the database name to `xml_doc`.
 
 # Usage: modifying a document
 
