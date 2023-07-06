@@ -55,7 +55,7 @@ This functionality is not yet implemented.
 
 If you wish to upload your own XML document, you can do the following. First create a new database and set up the database tables without content.
 ```
-$ psql -c "CREATE DATABASE xml_doc;" 
+$ createdb xml_doc 
 $ psql -d xml_doc -f setupXml.sql 
 ```
 Assuming you have the document in a text file called doc.xml, use the following Unix command to remove all spaces and add appropriate Links code
