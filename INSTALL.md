@@ -60,7 +60,7 @@ $ psql -d xml_doc -f setupXml.sql
 ```
 Assuming you have the document in a text file called doc.xml, use the following Unix command to remove all spaces and add appropriate Links code
 ```
-$ r -d '\n' < doc.xml | tr -d '\r' | sed 's/\> *\</\>\</g' | sed '1s/^/var doc = /g; $s/$/;\n/' > doc.links
+$ tr -d '\n' < doc.xml | tr -d '\r' | sed 's/\> *\</\>\</g' | sed '1s/^/var doc = /g; $s/$/;\n/' > doc.links
 ```
 Next invoke the Links REPL from the command line using
 ```
@@ -79,7 +79,7 @@ The prototype does not have editing functionality. There are two ways to modify 
 
 Similarly to uploading a new document and assuming the new XML in a text file called new.xml, use the following Unix command to remove all spaces and add appropriate Links code
 ```
-$ r -d '\n' < new.xml | tr -d '\r' | sed 's/\> *\</\>\</g' | sed '1s/^/var new = /g; $s/$/;\n/' > new.links
+$ tr -d '\n' < new.xml | tr -d '\r' | sed 's/\> *\</\>\</g' | sed '1s/^/var new = /g; $s/$/;\n/' > new.links
 ```
 Then invoke the Links REPL from the command line using
 ```
